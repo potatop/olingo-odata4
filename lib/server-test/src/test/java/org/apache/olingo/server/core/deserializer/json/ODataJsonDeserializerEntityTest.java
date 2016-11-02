@@ -18,10 +18,13 @@
  */
 package org.apache.olingo.server.core.deserializer.json;
 
+import static org.hamcrest.CoreMatchers.hasItems;
+import static org.hamcrest.CoreMatchers.is;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
@@ -31,8 +34,10 @@ import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
+import java.util.UUID;
 
 import org.apache.olingo.commons.api.Constants;
 import org.apache.olingo.commons.api.data.ComplexValue;
@@ -72,7 +77,8 @@ public class ODataJsonDeserializerEntityTest extends AbstractODataDeserializerTe
   @Test
   public void simpleEntityETAllPrim() throws Exception {
     String entityString =
-        "{\"PropertyInt16\":32767," +
+        "{\"@odata.type\":\"#Namespace1_Alias.ETAllPrim\"," +
+            "\"PropertyInt16\":32767," +
             "\"PropertyString\":\"First Resource - positive values\"," +
             "\"PropertyBoolean\":true," +
             "\"PropertyByte\":255," +
@@ -86,6 +92,7 @@ public class ODataJsonDeserializerEntityTest extends AbstractODataDeserializerTe
             "\"PropertyDate\":\"2012-12-03\"," +
             "\"PropertyDateTimeOffset\":\"2012-12-03T07:16:23Z\"," +
             "\"PropertyDuration\":\"PT6S\"," +
+            "\"PropertyGuid@odata.type\":\"#Guid\"," +
             "\"PropertyGuid\":\"01234567-89ab-cdef-0123-456789abcdef\"," +
             "\"PropertyTimeOfDay\":\"03:26:05\"}";
     final Entity entity = deserialize(entityString, "ETAllPrim");
@@ -110,6 +117,185 @@ public class ODataJsonDeserializerEntityTest extends AbstractODataDeserializerTe
     assertNotNull(entity.getProperty("PropertyDuration").getValue());
     assertNotNull(entity.getProperty("PropertyGuid").getValue());
     assertNotNull(entity.getProperty("PropertyTimeOfDay").getValue());
+  }
+
+  @Test
+  public void openEntityETAllPrim() throws Exception {
+    EdmEntityType entityType = createOpenEntityType();
+    String entityString =
+            "{\"@odata.type\":\"#namespace.name\"," +
+                    "\"PropertyInt16@odata.type\":\"#Int16\"," +
+                    "\"PropertyInt16\":32767," +
+                    "\"PropertyString@odata.type\":\"test\"," +
+                    "\"PropertyString\":\"First Resource - positive values\"," +
+                    "\"PropertyBoolean\":true," +
+                    "\"PropertyByte\":255," +
+                    "\"PropertySByte\":127," +
+                    "\"PropertyInt32\":2147483647," +
+                    "\"PropertyInt64\":9223372036854775807," +
+                    "\"PropertySingle\":1.79E20," +
+                    "\"PropertyDouble\":-1.79E19," +
+                    "\"PropertyDecimal\":34," +
+                    "\"PropertyBinary\":\"ASNFZ4mrze8=\"," +
+                    "\"PropertyDate\":\"2012-12-03\"," +
+                    "\"PropertyDateTimeOffset\":\"2012-12-03T07:16:23Z\"," +
+                    "\"PropertyDuration\":\"PT6S\"," +
+                    "\"PropertyGuid@odata.type\":\"#Guid\"," +
+                    "\"PropertyGuid\":\"01234567-89ab-cdef-0123-456789abcdef\"," +
+                    "\"PropertyTimeOfDay\":\"03:26:05\"}";
+
+    final Entity entity = OData.newInstance().createDeserializer(ContentType.JSON, metadata)
+            .entity(new ByteArrayInputStream(entityString.getBytes()), entityType)
+            .getEntity();
+    assertNotNull(entity);
+    List<Property> properties = entity.getProperties();
+    assertNotNull(properties);
+    assertEquals(1, properties.size());
+    assertNotNull(entity.getProperty("dynamicProperties"));
+    assertTrue(entity.getProperty("dynamicProperties").isComplex());
+    ComplexValue complexValue = entity.getProperty("dynamicProperties").asComplex();
+    properties = complexValue.getValue();
+    assertEquals(16, properties.size());
+
+    assertThat(properties, hasItems(
+            new Property(
+                    EdmPrimitiveTypeKind.Int16.getFullQualifiedName().getFullQualifiedNameAsString(),
+                    "PropertyInt16",
+                    ValueType.PRIMITIVE,
+                    new Short((short) 32767)),
+            new Property(
+                    EdmPrimitiveTypeKind.String.getFullQualifiedName().getFullQualifiedNameAsString(),
+                    "PropertyString",
+                    ValueType.PRIMITIVE,
+                    "First Resource - positive values"),
+            new Property(
+                    EdmPrimitiveTypeKind.Boolean.getFullQualifiedName().getFullQualifiedNameAsString(),
+                    "PropertyBoolean",
+                    ValueType.PRIMITIVE,
+                    new Boolean(true)),
+            new Property(
+                    EdmPrimitiveTypeKind.Int32.getFullQualifiedName().getFullQualifiedNameAsString(),
+                    "PropertyByte",
+                    ValueType.PRIMITIVE,
+                    new Integer(255)),
+            new Property(
+                    EdmPrimitiveTypeKind.Int32.getFullQualifiedName().getFullQualifiedNameAsString(),
+                    "PropertySByte",
+                    ValueType.PRIMITIVE,
+                    new Integer(127)),
+            new Property(
+                    EdmPrimitiveTypeKind.Int32.getFullQualifiedName().getFullQualifiedNameAsString(),
+                    "PropertyInt32",
+                    ValueType.PRIMITIVE,
+                    new Integer(2147483647)),
+            new Property(
+                    EdmPrimitiveTypeKind.Int64.getFullQualifiedName().getFullQualifiedNameAsString(),
+                    "PropertyInt64",
+                    ValueType.PRIMITIVE,
+                    new Long(9223372036854775807l)),
+            new Property(
+                    EdmPrimitiveTypeKind.Double.getFullQualifiedName().getFullQualifiedNameAsString(),
+                    "PropertySingle",
+                    ValueType.PRIMITIVE,
+                    new Double(1.79E20)),
+            new Property(
+                    EdmPrimitiveTypeKind.Double.getFullQualifiedName().getFullQualifiedNameAsString(),
+                    "PropertyDouble",
+                    ValueType.PRIMITIVE,
+                    new Double(-1.79E19)),
+            new Property(
+                    EdmPrimitiveTypeKind.Int32.getFullQualifiedName().getFullQualifiedNameAsString(),
+                    "PropertyDecimal",
+                    ValueType.PRIMITIVE,
+                    new Integer(34)),
+            new Property(
+                    EdmPrimitiveTypeKind.String.getFullQualifiedName().getFullQualifiedNameAsString(),
+                    "PropertyBinary",
+                    ValueType.PRIMITIVE,
+                    "ASNFZ4mrze8="),
+            new Property(
+                    EdmPrimitiveTypeKind.String.getFullQualifiedName().getFullQualifiedNameAsString(),
+                    "PropertyDate",
+                    ValueType.PRIMITIVE,
+                    "2012-12-03"),
+            new Property(
+                    EdmPrimitiveTypeKind.String.getFullQualifiedName().getFullQualifiedNameAsString(),
+                    "PropertyDateTimeOffset",
+                    ValueType.PRIMITIVE,
+                    "2012-12-03T07:16:23Z"),
+            new Property(
+                    EdmPrimitiveTypeKind.String.getFullQualifiedName().getFullQualifiedNameAsString(),
+                    "PropertyDuration",
+                    ValueType.PRIMITIVE,
+                    "PT6S"),
+            new Property(
+                    EdmPrimitiveTypeKind.Guid.getFullQualifiedName().getFullQualifiedNameAsString(),
+                    "PropertyGuid",
+                    ValueType.PRIMITIVE,
+                    UUID.fromString("01234567-89ab-cdef-0123-456789abcdef")),
+            new Property(
+                    EdmPrimitiveTypeKind.String.getFullQualifiedName().getFullQualifiedNameAsString(),
+                    "PropertyTimeOfDay",
+                    ValueType.PRIMITIVE,
+                    "03:26:05")));
+  }
+
+  @Test
+  public void openEntityTypeAnnotationShouldWorkWithFullName() throws Exception {
+    EdmEntityType entityType = createOpenEntityType();
+    String entityString = "{\"PropertyInt16@odata.type\":\"#Edm.Int16\","
+            + "\"PropertyInt16\":32767}";
+
+    final Entity entity = OData.newInstance().createDeserializer(ContentType.JSON, metadata)
+            .entity(new ByteArrayInputStream(entityString.getBytes()), entityType)
+            .getEntity();
+    assertNotNull(entity);
+    List<Property> properties = entity.getProperties();
+    assertNotNull(properties);
+    assertEquals(1, properties.size());
+    assertNotNull(entity.getProperty("dynamicProperties"));
+    assertTrue(entity.getProperty("dynamicProperties").isComplex());
+    ComplexValue complexValue = entity.getProperty("dynamicProperties").asComplex();
+    properties = complexValue.getValue();
+
+    assertThat(properties.get(0), is(new Property(
+            EdmPrimitiveTypeKind.Int16.getFullQualifiedName().getFullQualifiedNameAsString(),
+            "PropertyInt16",
+            ValueType.PRIMITIVE,
+            new Short((short) 32767))));
+  }
+
+  @Test
+  public void openEntityTypeAnnotationShouldWorkWithoutHash() throws Exception {
+    EdmEntityType entityType = createOpenEntityType();
+    String entityString = "{\"PropertyInt16@odata.type\":\"Int16\","
+            + "\"PropertyInt16\":32767}";
+
+    final Entity entity = OData.newInstance().createDeserializer(ContentType.JSON, metadata)
+            .entity(new ByteArrayInputStream(entityString.getBytes()), entityType)
+            .getEntity();
+    assertNotNull(entity);
+    List<Property> properties = entity.getProperties();
+    assertNotNull(properties);
+    assertEquals(1, properties.size());
+    assertNotNull(entity.getProperty("dynamicProperties"));
+    assertTrue(entity.getProperty("dynamicProperties").isComplex());
+    ComplexValue complexValue = entity.getProperty("dynamicProperties").asComplex();
+    properties = complexValue.getValue();
+
+    assertThat(properties.get(0), is(new Property(
+            EdmPrimitiveTypeKind.Int16.getFullQualifiedName().getFullQualifiedNameAsString(),
+            "PropertyInt16",
+            ValueType.PRIMITIVE,
+            new Short((short) 32767))));
+  }
+
+  private EdmEntityType createOpenEntityType() {
+    EdmEntityType entityType = mock(EdmEntityType.class);
+    when(entityType.getFullQualifiedName()).thenReturn(new FullQualifiedName("namespace", "name"));
+    when(entityType.getPropertyNames()).thenReturn(Collections.<String>emptyList());
+    when(entityType.isOpenType()).thenReturn(true);
+    return entityType;
   }
 
   @Test
@@ -140,6 +326,77 @@ public class ODataJsonDeserializerEntityTest extends AbstractODataDeserializerTe
     assertEquals("First Resource - positive values", entity.getProperty("PropertyString").getValue());
     assertNull(entity.getProperty("PropertyBoolean").getValue());
     assertNull(entity.getProperty("PropertyDate").getValue());
+  }
+
+  @Test
+  public void openEntityETAllPrimWithDefaultNullValue() throws Exception {
+    EdmEntityType entityType = createOpenEntityType();
+
+    String entityString =
+            "{\"PropertyInt16\":32767," +
+                    "\"PropertyString\":\"First Resource - positive values\"," +
+                    "\"PropertyBoolean\":null," +
+                    "\"PropertyByte\":255," +
+                    "\"PropertySByte\":127," +
+                    "\"PropertyInt32\":2147483647," +
+                    "\"PropertyInt64\":9223372036854775807," +
+                    "\"PropertySingle\":1.79E20," +
+                    "\"PropertyDouble\":-1.79E19," +
+                    "\"PropertyDecimal\":34," +
+                    "\"PropertyBinary\":\"ASNFZ4mrze8=\"," +
+                    "\"PropertyDate\":null," +
+                    "\"PropertyDateTimeOffset\":\"2012-12-03T07:16:23Z\"," +
+                    "\"PropertyDuration\":\"PT6S\"," +
+                    "\"PropertyGuid\":\"01234567-89ab-cdef-0123-456789abcdef\"," +
+                    "\"PropertyTimeOfDay\":\"03:26:05\"}";
+
+    final Entity entity = OData.newInstance().createDeserializer(ContentType.JSON)
+            .entity(new ByteArrayInputStream(entityString.getBytes()), entityType)
+            .getEntity();
+    assertNotNull(entity);
+    List<Property> properties = entity.getProperties();
+    assertNotNull(properties);
+    assertEquals(1, properties.size());
+    assertNotNull(entity.getProperty("dynamicProperties"));
+    assertTrue(entity.getProperty("dynamicProperties").isComplex());
+    ComplexValue complexValue = entity.getProperty("dynamicProperties").asComplex();
+    properties = complexValue.getValue();
+    assertEquals(16, properties.size());
+
+    assertEquals("PropertyInt16", properties.get(0).getName());
+    assertEquals(new Integer(32767), properties.get(0).getValue());
+    assertEquals("PropertyString", properties.get(1).getName());
+    assertEquals("First Resource - positive values", properties.get(1).getValue());
+    assertEquals("PropertyBoolean", properties.get(2).getName());
+    assertNull(properties.get(2).getValue());
+    assertNull(properties.get(2).getType());
+    assertEquals("PropertyByte", properties.get(3).getName());
+    assertEquals(new Integer( 255), properties.get(3).getValue());
+    assertEquals("PropertySByte", properties.get(4).getName());
+    assertEquals(new Integer( 127), properties.get(4).getValue());
+    assertEquals("PropertyInt32", properties.get(5).getName());
+    assertEquals(new Integer(2147483647), properties.get(5).getValue());
+    assertEquals("PropertyInt64", properties.get(6).getName());
+    assertEquals(new Long(9223372036854775807l), properties.get(6).getValue());
+    assertEquals("PropertySingle", properties.get(7).getName());
+    assertEquals(new Double(1.79E20), properties.get(7).getValue());
+    assertEquals("PropertyDouble", properties.get(8).getName());
+    assertEquals(new Double(-1.79E19), properties.get(8).getValue());
+    assertEquals("PropertyDecimal", properties.get(9).getName());
+    assertEquals(new Integer(34), properties.get(9).getValue());
+    assertEquals("PropertyBinary", properties.get(10).getName());
+    assertEquals("ASNFZ4mrze8=", properties.get(10).getValue());
+    assertEquals("PropertyDate", properties.get(11).getName());
+    assertNull(properties.get(11).getValue());
+    assertNull(properties.get(11).getType());
+    assertEquals("PropertyDateTimeOffset", properties.get(12).getName());
+    assertEquals("2012-12-03T07:16:23Z", properties.get(12).getValue());
+    assertNotNull("PropertyDuration", properties.get(13).getName());
+    assertEquals("PT6S", properties.get(13).getValue());
+    assertNotNull("PropertyGuid", properties.get(14).getName());
+    assertEquals("01234567-89ab-cdef-0123-456789abcdef", properties.get(14).getValue());
+    assertNotNull("PropertyTimeOfDay", properties.get(15).getName());
+    assertEquals("03:26:05", properties.get(15).getValue());
   }
 
   @Test
@@ -216,6 +473,51 @@ public class ODataJsonDeserializerEntityTest extends AbstractODataDeserializerTe
     assertNotNull(entity.getProperty("PropertyComp"));
     assertNotNull(entity.getProperty("PropertyComp") instanceof List);
     List<Property> complexProperties = entity.getProperty("PropertyComp").asComplex().getValue();
+    assertEquals(16, complexProperties.size());
+  }
+
+  @Test
+  public void openEntityETCompAllPrim() throws Exception {
+    EdmEntityType entityType = createOpenEntityType();
+
+    String entityString = "{\"PropertyInt16\":32767," +
+            "\"OpenPropertyComp\":{" +
+            "\"@odata.type\":\"#olingo.odata.test1.CTAllPrim\"," +
+            "\"PropertyString\":\"First Resource - first\"," +
+            "\"PropertyBinary\":\"ASNFZ4mrze8=\"," +
+            "\"PropertyBoolean\":true," +
+            "\"PropertyByte\":255," +
+            "\"PropertyDate\":\"2012-10-03\"," +
+            "\"PropertyDateTimeOffset\":\"2012-10-03T07:16:23.1234567Z\"," +
+            "\"PropertyDecimal\":34.27," +
+            "\"PropertySingle\":1.79E20," +
+            "\"PropertyDouble\":-1.79E19," +
+            "\"PropertyDuration\":\"PT6S\"," +
+            "\"PropertyGuid\":\"01234567-89ab-cdef-0123-456789abcdef\"," +
+            "\"PropertyInt16\":32767," +
+            "\"PropertyInt32\":2147483647," +
+            "\"PropertyInt64\":9223372036854775807," +
+            "\"PropertySByte\":127," +
+            "\"PropertyTimeOfDay\":\"01:00:01\"}}";
+
+    final Entity entity = OData.newInstance().createDeserializer(ContentType.JSON, metadata)
+            .entity(new ByteArrayInputStream(entityString.getBytes()), entityType)
+            .getEntity();
+    assertNotNull(entity);
+    List<Property> properties = entity.getProperties();
+    assertNotNull(properties);
+    assertEquals(1, properties.size());
+
+    assertNotNull(entity.getProperty("dynamicProperties"));
+    assertTrue(entity.getProperty("dynamicProperties").isComplex());
+    ComplexValue complexValue = entity.getProperty("dynamicProperties").asComplex();
+    properties = complexValue.getValue();
+    assertEquals(2, properties.size());
+    assertEquals("PropertyInt16", properties.get(0).getName());
+    assertEquals(new Integer(32767), properties.get(0).getValue());
+    assertEquals("OpenPropertyComp", properties.get(1).getName());
+    assertTrue(properties.get(1).isComplex());
+    List<Property> complexProperties = properties.get(1).asComplex().getValue();
     assertEquals(16, complexProperties.size());
   }
 
@@ -340,6 +642,114 @@ public class ODataJsonDeserializerEntityTest extends AbstractODataDeserializerTe
     assertEquals(true, asCollection.get(0));
     assertEquals(false, asCollection.get(1));
     assertEquals(true, asCollection.get(2));
+  }
+
+  @Test
+  public void openEntityETCollAllPrim() throws Exception {
+    EdmEntityType entityType = createOpenEntityType();
+
+    final String entityString = "{"
+            + "\"PropertyInt16\":1,"
+            + "\"CollPropertyString@odata.type\":\"#Collection(String)\","
+            + "\"CollPropertyString\":"
+            + "[\"Employee1@company.example\",\"Employee2@company.example\",\"Employee3@company.example\"],"
+            + "\"CollPropertyBoolean@odata.type\":\"#Collection(Boolean)\","
+            + "\"CollPropertyBoolean\":[true,false,true],"
+            + "\"CollPropertyByte@odata.type\":\"#Collection(Byte)\","
+            + "\"CollPropertyByte\":[50,200,249],"
+            + "\"CollPropertySByte@odata.type\":\"#Collection(SByte)\","
+            + "\"CollPropertySByte\":[-120,120,126],"
+            + "\"CollPropertyInt16@odata.type\":\"#Collection(Int16)\","
+            + "\"CollPropertyInt16\":[1000,2000,30112],"
+            + "\"CollPropertyInt32@odata.type\":\"#Collection(Int32)\","
+            + "\"CollPropertyInt32\":[23232323,11223355,10000001],"
+            + "\"CollPropertyInt64@odata.type\":\"#Collection(Int64)\","
+            + "\"CollPropertyInt64\":[929292929292,333333333333,444444444444],"
+            + "\"CollPropertySingle@odata.type\":\"#Collection(Single)\","
+            + "\"CollPropertySingle\":[1790.0,26600.0,3210.0],"
+            + "\"CollPropertyDouble@odata.type\":\"#Collection(Double)\","
+            + "\"CollPropertyDouble\":[-17900.0,-2.78E7,3210.0],"
+            + "\"CollPropertyDecimal@odata.type\":\"#Collection(Decimal)\","
+            + "\"CollPropertyDecimal\":[12,-2,1234],"
+            + "\"CollPropertyBinary@odata.type\":\"#Collection(Binary)\","
+            + "\"CollPropertyBinary\":[\"q83v\",\"ASNF\",\"VGeJ\"],"
+            + "\"CollPropertyDate@odata.type\":\"#Collection(Date)\","
+            + "\"CollPropertyDate\":[\"1958-12-03\",\"1999-08-05\",\"2013-06-25\"],"
+            + "\"CollPropertyDateTimeOffset@odata.type\":\"#Collection(DateTimeOffset)\","
+            + "\"CollPropertyDateTimeOffset\":[\"2015-08-12T03:08:34Z\",\"1970-03-28T12:11:10Z\","
+            + "\"1948-02-17T09:09:09Z\"],"
+            + "\"CollPropertyDuration@odata.type\":\"#Collection(Duration)\","
+            + "\"CollPropertyDuration\":[\"PT13S\",\"PT5H28M0S\",\"PT1H0S\"],"
+            + "\"CollPropertyGuid@odata.type\":\"#Collection(Guid)\","
+            + "\"CollPropertyGuid\":[\"ffffff67-89ab-cdef-0123-456789aaaaaa\",\"eeeeee67-89ab-cdef-0123-456789bbbbbb\","
+            + "\"cccccc67-89ab-cdef-0123-456789cccccc\"],"
+            + "\"CollPropertyTimeOfDay@odata.type\":\"#Collection(TimeOfDay)\","
+            + "\"CollPropertyTimeOfDay\":[\"04:14:13\",\"23:59:59\",\"01:12:33\"]"
+            + "}";
+
+    final Entity entity = OData.newInstance().createDeserializer(ContentType.JSON, metadata)
+            .entity(new ByteArrayInputStream(entityString.getBytes()), entityType)
+            .getEntity();
+    assertNotNull(entity);
+    List<Property> properties = entity.getProperties();
+    assertNotNull(properties);
+    assertEquals(1, properties.size());
+    assertNotNull(entity.getProperty("dynamicProperties"));
+    assertTrue(entity.getProperty("dynamicProperties").isComplex());
+    ComplexValue complexValue = entity.getProperty("dynamicProperties").asComplex();
+    properties = complexValue.getValue();
+    assertEquals(17, properties.size());
+
+    // All properties need 3 entries.
+    for (Property prop : properties) {
+      if (prop.getName().equals("CollPropertyBoolean")) {
+        List<? extends Object> asCollection = prop.asCollection();
+        assertEquals(true, asCollection.get(0));
+        assertEquals(false, asCollection.get(1));
+        assertEquals(true, asCollection.get(2));
+      } else if (!prop.getName().equals("PropertyInt16")) {
+        assertEquals(ValueType.COLLECTION_PRIMITIVE, prop.getValueType());
+        assertTrue(prop.getValue() instanceof List);
+        List<? extends Object> asCollection = prop.asCollection();
+        assertEquals(3, asCollection.size());
+      }
+    }
+  }
+
+  @Test
+  public void openEntityETCollComp() throws Exception {
+    EdmEntityType entityType = createOpenEntityType();
+
+    final String entityString = "{"
+            + "\"CollPropertyComp@odata.type\":\"#Collection(olingo.odata.test1.CTTwoPrim)\","
+            + "\"CollPropertyComp\":["
+            + "{\"PropertyInt16\":123,\"PropertyString\":\"TEST 1\"},"
+            + "{\"PropertyInt16\":456,\"PropertyString\":\"TEST 2\"},"
+            + "{\"PropertyInt16\":789,\"PropertyString\":\"TEST 3\"}]}";
+
+    final Entity entity = OData.newInstance().createDeserializer(ContentType.JSON, metadata)
+            .entity(new ByteArrayInputStream(entityString.getBytes()), entityType)
+            .getEntity();
+    assertNotNull(entity);
+    List<Property> properties = entity.getProperties();
+    assertNotNull(properties);
+    assertEquals(1, properties.size());
+    assertNotNull(entity.getProperty("dynamicProperties"));
+    assertTrue(entity.getProperty("dynamicProperties").isComplex());
+    ComplexValue complexValue = entity.getProperty("dynamicProperties").asComplex();
+    properties = complexValue.getValue();
+    assertEquals(1, properties.size());
+    assertEquals("CollPropertyComp", properties.get(0).getName());
+    assertEquals(ValueType.COLLECTION_COMPLEX, properties.get(0).getValueType());
+
+    List<? extends Object> asCollection = properties.get(0).asCollection();
+    assertEquals(3, asCollection.size());
+
+    for (Object arrayElement : asCollection) {
+      assertTrue(arrayElement instanceof ComplexValue);
+      List<Property> castedArrayElement = ((ComplexValue) arrayElement).getValue();
+      assertEquals(2, castedArrayElement.size());
+    }
   }
 
   @Test
@@ -1361,6 +1771,49 @@ public class ODataJsonDeserializerEntityTest extends AbstractODataDeserializerTe
         DeserializerException.MessageKeys.INVALID_VALUE_FOR_PROPERTY);
   }
 
+  @Test
+  public void openEntityMissingProperty() throws Exception {
+    EdmEntityType entityType = createOpenEntityType();
+    String entityString = "{\"PropertyInt16@odata.type\":\"#Edm.Int16\"}";
+    expectException(entityString, entityType, DeserializerException.MessageKeys.INVALID_NULL_PARAMETER);
+  }
+
+  @Test
+  public void openEntityPrimCollectionPropertyNeedOdataType() throws Exception {
+    EdmEntityType entityType = createOpenEntityType();
+    String entityString = "{\"PropertyInt16\":[116, 225]}";
+    expectException(entityString, entityType, DeserializerException.MessageKeys.UNKNOWN_CONTENT);
+  }
+
+  @Test
+  public void openEntityComplexPropertyNeedMetadata() throws Exception {
+    EdmEntityType entityType = createOpenEntityType();
+    String entityString = "{\"PropComp@odata.type\":\"olingo.odata.test1.CTTwoPrim\","
+            + "\"PropComp\":{\"PropertyInt16\":123,\"PropertyString\":\"TEST 1\"}}";
+    try {
+      OData.newInstance().createDeserializer(ContentType.JSON)
+              .entity(new ByteArrayInputStream(entityString.getBytes()), entityType)
+              .getEntity();
+      fail("Expected exception not thrown.");
+    } catch (final DeserializerException e) {
+      assertEquals(DeserializerException.MessageKeys.UNKNOWN_CONTENT, e.getMessageKey());
+    }
+  }
+
+  @Test
+  public void openEntityComplexPropertyNeedOdataType() throws Exception {
+    EdmEntityType entityType = createOpenEntityType();
+    String entityString = "{\"PropComp\":{\"PropertyInt16\":123,\"PropertyString\":\"TEST 1\"}}";
+    expectException(entityString, entityType, DeserializerException.MessageKeys.UNKNOWN_CONTENT);
+  }
+
+  @Test
+  public void openEntityComplexCollectionPropertyNeedOdataType() throws Exception {
+    EdmEntityType entityType = createOpenEntityType();
+    String entityString = "{\"PropCompCol\":[{\"PropertyInt16\":123,\"PropertyString\":\"TEST 1\"}]}";
+    expectException(entityString, entityType, DeserializerException.MessageKeys.UNKNOWN_CONTENT);
+  }
+
   protected static Entity deserialize(final InputStream stream, final String entityTypeName,
       final ContentType contentType) throws DeserializerException {
     return OData.newInstance().createDeserializer(contentType, metadata)
@@ -1401,5 +1854,17 @@ public class ODataJsonDeserializerEntityTest extends AbstractODataDeserializerTe
     } catch (final DeserializerException e) {
       assertEquals(messageKey, e.getMessageKey());
     }
-  } 
+  }
+
+  private static void expectException(final String entityString, final EdmEntityType entityType,
+      final DeserializerException.MessageKeys messageKey) {
+    try {
+      OData.newInstance().createDeserializer(ContentType.JSON, metadata)
+              .entity(new ByteArrayInputStream(entityString.getBytes()), entityType)
+              .getEntity();
+      fail("Expected exception not thrown.");
+    } catch (final DeserializerException e) {
+      assertEquals(messageKey, e.getMessageKey());
+    }
+  }
 }

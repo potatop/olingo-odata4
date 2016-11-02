@@ -28,6 +28,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.apache.olingo.commons.api.Constants;
 import org.apache.olingo.commons.api.data.ComplexValue;
@@ -54,6 +56,12 @@ import org.apache.olingo.commons.api.edm.EdmTypeDefinition;
 import org.apache.olingo.commons.api.edm.FullQualifiedName;
 import org.apache.olingo.commons.api.edm.constants.EdmTypeKind;
 import org.apache.olingo.commons.api.format.ContentType;
+import org.apache.olingo.commons.core.edm.primitivetype.EdmBoolean;
+import org.apache.olingo.commons.core.edm.primitivetype.EdmDouble;
+import org.apache.olingo.commons.core.edm.primitivetype.EdmInt32;
+import org.apache.olingo.commons.core.edm.primitivetype.EdmInt64;
+import org.apache.olingo.commons.core.edm.primitivetype.EdmPrimitiveTypeFactory;
+import org.apache.olingo.commons.core.edm.primitivetype.EdmString;
 import org.apache.olingo.server.api.ServiceMetadata;
 import org.apache.olingo.server.api.deserializer.DeserializerException;
 import org.apache.olingo.server.api.deserializer.DeserializerException.MessageKeys;
@@ -78,6 +86,7 @@ public class ODataJsonDeserializer implements ODataDeserializer {
 
   private static final String ODATA_ANNOTATION_MARKER = "@";
   private static final String ODATA_CONTROL_INFORMATION_PREFIX = "@odata.";
+  private static final Pattern ODATA_COLLECTION_PATTERN = Pattern.compile("Collection\\((.+)\\)");
 
   private final boolean isIEEE754Compatible;
   private ServiceMetadata serviceMetadata;
@@ -322,7 +331,170 @@ public class ODataJsonDeserializer implements ODataDeserializer {
     // remove here to avoid iterator issues.
     node.remove(toRemove);
 
+    if (edmEntityType.isOpenType()) {
+      consumeDynamicEntityProperties(node, entity);
+    }
     removeAnnotations(node);
+  }
+
+  /**
+   * Consume remaining dynamic properties.
+   *
+   * @param node node json node which is consumed
+   * @param entity entity instance which is filled
+   * @throws DeserializerException if an exception during consumation occurs
+   */
+  private void consumeDynamicEntityProperties(final ObjectNode node, final Entity entity)
+          throws DeserializerException {
+    ComplexValue complexValue = new ComplexValue();
+    List<String> toRemove = new ArrayList<String>();
+    Iterator<Entry<String, JsonNode>> fieldsIterator = node.fields();
+    while (fieldsIterator.hasNext()) {
+      Entry<String, JsonNode> field = fieldsIterator.next();
+
+      // find all odata type annotations, and parse associated properties
+      if (field.getValue().isValueNode()) {
+        int index = field.getKey().indexOf(Constants.JSON_TYPE);
+        if (index >= 0) {
+          String propertyName = field.getKey().substring(0, index);
+          if (!propertyName.isEmpty()) {
+            JsonNode jsonNode = node.get(propertyName);
+            if (jsonNode == null) {
+              throw new DeserializerException("property: " + propertyName + " has property annotations but not value.",
+                      MessageKeys.INVALID_NULL_PARAMETER, propertyName);
+            }
+            String typeName = trimStart(field.getValue().asText(), "#");
+
+            Matcher matcher = ODATA_COLLECTION_PATTERN.matcher(typeName);
+            boolean isCollection = matcher.find();
+            if (isCollection) {
+              typeName = matcher.group(1);
+            }
+            EdmType type = getEdmTypeFromTypeAnnotationValue(typeName);
+            // ignore if type cannot be determined
+            if (type != null) {
+              Property property = consumePropertyNode(propertyName, type, isCollection, true, null, null, null, true, null,
+                      jsonNode);
+              complexValue.getValue().add(property);
+              toRemove.add(propertyName);
+            }
+          }
+          toRemove.add(field.getKey());
+        }
+      }
+    }
+    node.remove(toRemove);
+
+    fieldsIterator = node.fields();
+    toRemove.clear();
+    // loop through remaining properties
+    while (fieldsIterator.hasNext()) {
+      Entry<String, JsonNode> field = fieldsIterator.next();
+      if (field.getValue().isObject()) {
+        Property property = new Property();
+        property.setName(field.getKey());
+        consumeDynamicJsonObject((ObjectNode) field.getValue(), property);
+        complexValue.getValue().add(property);
+        toRemove.add(field.getKey());
+      } else {
+        JsonNode jsonNode = field.getValue();
+        if (jsonNode.isNull()) {
+          complexValue.getValue().add(new Property(null, field.getKey(), ValueType.PRIMITIVE, null));
+          toRemove.add(field.getKey());
+          continue;
+        }
+        EdmType type = inferPrimTypeFromJsonNode(jsonNode, field.getKey());
+        // ignore if type cannot be determined
+        if (type != null) {
+          Property property = consumePropertyNode(field.getKey(), type, false, true, null, null, null, true, null,
+                  jsonNode);
+          complexValue.getValue().add(property);
+          toRemove.add(field.getKey());
+        }
+      }
+    }
+
+    entity.addProperty(new Property(null, "dynamicProperties", ValueType.COMPLEX, complexValue));
+    node.remove(toRemove);
+  }
+
+  private String trimStart(String str, String stripChars) {
+    if (str == null || str.isEmpty()) {
+      return str;
+    }
+    if (stripChars == null || stripChars.isEmpty()) {
+      return str;
+    }
+    int start;
+    for (start = 0; start < str.length(); ++start) {
+      if (stripChars.indexOf(str.charAt(start)) == -1) {
+        break;
+      }
+    }
+    return str.substring(start);
+  }
+
+  private void consumeDynamicJsonObject(ObjectNode node, Property property) throws DeserializerException
+  {
+    EdmType type = null;
+    JsonNode odataTypeNode = node.get(Constants.JSON_TYPE);
+    if (odataTypeNode != null) {
+      String odataType = trimStart(odataTypeNode.asText(), "#");
+      type = getEdmTypeFromTypeAnnotationValue(odataType);
+    }
+    if (type == null) {
+      throw new DeserializerException("Property with untyped value: " + node.toString()  + " is invalid."
+              + " Consider using a OData type annotation explicitly.", MessageKeys.UNKNOWN_CONTENT);
+    }
+
+    consumePropertySingleNode(property.getName(), type, true, null, null, null, true, null, node, property);
+  }
+
+  private EdmType inferPrimTypeFromJsonNode(JsonNode jsonNode, String name) throws DeserializerException
+  {
+    EdmType type = null;
+    if (jsonNode.isTextual()) {
+      type = EdmString.getInstance();
+    } else if (jsonNode.isInt()) {
+      type = EdmInt32.getInstance();
+    } else if (jsonNode.isLong()) {
+      type = EdmInt64.getInstance();
+    } else if (jsonNode.isDouble()) {
+      type = EdmDouble.getInstance();
+    } else if (jsonNode.isBoolean()) {
+      type = EdmBoolean.getInstance();
+    }
+    return type;
+  }
+
+  private EdmType getEdmTypeFromTypeAnnotationValue(String typeName) throws DeserializerException
+  {
+    EdmType type;
+    if (typeName.contains(".")) {
+      FullQualifiedName fqn = new FullQualifiedName(typeName);
+      if (fqn.getNamespace().equals(EdmPrimitiveType.EDM_NAMESPACE)) {
+        EdmPrimitiveTypeKind kind = EdmPrimitiveTypeKind.valueOfFQN(fqn);
+        type = EdmPrimitiveTypeFactory.getInstance(kind);
+      } else if (serviceMetadata == null) {
+        throw new DeserializerException(
+                "Failed to resolve Odata type " + typeName + " due to metadata is not available",
+                DeserializerException.MessageKeys.UNKNOWN_CONTENT);
+      } else {
+        type = serviceMetadata.getEdm().getEntityType(fqn);
+        if (type == null) {
+          type = serviceMetadata.getEdm().getComplexType(fqn);
+        }
+      }
+    } else {
+      // check if it is primitive
+      try {
+        EdmPrimitiveTypeKind kind = EdmPrimitiveTypeKind.valueOf(typeName);
+        type = EdmPrimitiveTypeFactory.getInstance(kind);
+      } catch (IllegalArgumentException e) {
+        type = null;
+      }
+    }
+    return type;
   }
 
   private void consumeEntityProperties(final EdmEntityType edmEntityType, final ObjectNode node,
