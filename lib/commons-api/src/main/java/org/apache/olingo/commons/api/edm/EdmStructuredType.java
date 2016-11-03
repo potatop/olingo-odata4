@@ -93,4 +93,11 @@ public interface EdmStructuredType extends EdmType, EdmAnnotatable {
    * @return <code>true</code> if the structured type is abstract
    */
   boolean isAbstract();
+
+  /**
+   * Gets dynamic property name.
+   *
+   * @return the dynamic property name
+   */
+  String getDynamicPropertyName();
 }

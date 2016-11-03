@@ -138,4 +138,9 @@ public class DynamicStructuredType implements EdmStructuredType, Cloneable {
   public boolean isAbstract() {
     return startType.isAbstract();
   }
+
+  @Override
+  public String getDynamicPropertyName() {
+    return startType.getDynamicPropertyName();
+  }
 }

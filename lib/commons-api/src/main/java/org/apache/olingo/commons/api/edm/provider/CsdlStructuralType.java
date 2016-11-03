@@ -63,6 +63,11 @@ public abstract class CsdlStructuralType extends CsdlAbstractEdmItem implements 
    */
   protected List<CsdlAnnotation> annotations = new ArrayList<CsdlAnnotation>();
 
+  /**
+   * The Dynamic property name.
+   */
+  protected String dynamicPropertyName = "DynamicProperties";
+
   @Override
   public String getName() {
     return name;
@@ -235,5 +240,25 @@ public abstract class CsdlStructuralType extends CsdlAbstractEdmItem implements 
   public CsdlStructuralType setAnnotations(final List<CsdlAnnotation> annotations) {
     this.annotations = annotations;
     return this;
+  }
+
+  /**
+   * Sets dynamic property name.
+   *
+   * @param dynamicPropertyName the dynamic property name
+   * @return this instance
+   */
+  public CsdlStructuralType setDynamicPropertyName(final String dynamicPropertyName) {
+    this.dynamicPropertyName = dynamicPropertyName;
+    return this;
+  }
+
+  /**
+   * Gets dynamic property name.
+   *
+   * @return the dynamic property name
+   */
+  public String getDynamicPropertyName() {
+    return dynamicPropertyName;
   }
 }

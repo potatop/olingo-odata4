@@ -45,10 +45,12 @@ import org.apache.olingo.commons.api.data.Entity;
 import org.apache.olingo.commons.api.data.Link;
 import org.apache.olingo.commons.api.data.Property;
 import org.apache.olingo.commons.api.data.ValueType;
+import org.apache.olingo.commons.api.edm.EdmComplexType;
 import org.apache.olingo.commons.api.edm.EdmEntityType;
 import org.apache.olingo.commons.api.edm.EdmPrimitiveTypeKind;
 import org.apache.olingo.commons.api.edm.EdmProperty;
 import org.apache.olingo.commons.api.edm.FullQualifiedName;
+import org.apache.olingo.commons.api.edm.constants.EdmTypeKind;
 import org.apache.olingo.commons.api.edm.provider.CsdlMapping;
 import org.apache.olingo.commons.api.format.ContentType;
 import org.apache.olingo.server.api.OData;
@@ -151,9 +153,9 @@ public class ODataJsonDeserializerEntityTest extends AbstractODataDeserializerTe
     List<Property> properties = entity.getProperties();
     assertNotNull(properties);
     assertEquals(1, properties.size());
-    assertNotNull(entity.getProperty("dynamicProperties"));
-    assertTrue(entity.getProperty("dynamicProperties").isComplex());
-    ComplexValue complexValue = entity.getProperty("dynamicProperties").asComplex();
+    assertNotNull(entity.getProperty("DynamicProperties"));
+    assertTrue(entity.getProperty("DynamicProperties").isComplex());
+    ComplexValue complexValue = entity.getProperty("DynamicProperties").asComplex();
     properties = complexValue.getValue();
     assertEquals(16, properties.size());
 
@@ -253,9 +255,9 @@ public class ODataJsonDeserializerEntityTest extends AbstractODataDeserializerTe
     List<Property> properties = entity.getProperties();
     assertNotNull(properties);
     assertEquals(1, properties.size());
-    assertNotNull(entity.getProperty("dynamicProperties"));
-    assertTrue(entity.getProperty("dynamicProperties").isComplex());
-    ComplexValue complexValue = entity.getProperty("dynamicProperties").asComplex();
+    assertNotNull(entity.getProperty("DynamicProperties"));
+    assertTrue(entity.getProperty("DynamicProperties").isComplex());
+    ComplexValue complexValue = entity.getProperty("DynamicProperties").asComplex();
     properties = complexValue.getValue();
 
     assertThat(properties.get(0), is(new Property(
@@ -278,9 +280,9 @@ public class ODataJsonDeserializerEntityTest extends AbstractODataDeserializerTe
     List<Property> properties = entity.getProperties();
     assertNotNull(properties);
     assertEquals(1, properties.size());
-    assertNotNull(entity.getProperty("dynamicProperties"));
-    assertTrue(entity.getProperty("dynamicProperties").isComplex());
-    ComplexValue complexValue = entity.getProperty("dynamicProperties").asComplex();
+    assertNotNull(entity.getProperty("DynamicProperties"));
+    assertTrue(entity.getProperty("DynamicProperties").isComplex());
+    ComplexValue complexValue = entity.getProperty("DynamicProperties").asComplex();
     properties = complexValue.getValue();
 
     assertThat(properties.get(0), is(new Property(
@@ -291,10 +293,25 @@ public class ODataJsonDeserializerEntityTest extends AbstractODataDeserializerTe
   }
 
   private EdmEntityType createOpenEntityType() {
+    EdmComplexType complexType = mock(EdmComplexType.class);
+    when(complexType.getFullQualifiedName()).thenReturn(new FullQualifiedName("namespace", "cname"));
+    when(complexType.getPropertyNames()).thenReturn(Collections.<String>emptyList());
+    when(complexType.isOpenType()).thenReturn(true);
+    when(complexType.getDynamicPropertyName()).thenReturn("Properties");
+    when(complexType.getKind()).thenReturn(EdmTypeKind.COMPLEX);
+
+    EdmProperty property = mock(EdmProperty.class);
+    when(property.getName()).thenReturn("DynamicCTProp");
+    when(property.getType()).thenReturn(complexType);
+    when(property.isNullable()).thenReturn(true);
+    when(property.isUnicode()).thenReturn(true);
+
     EdmEntityType entityType = mock(EdmEntityType.class);
     when(entityType.getFullQualifiedName()).thenReturn(new FullQualifiedName("namespace", "name"));
-    when(entityType.getPropertyNames()).thenReturn(Collections.<String>emptyList());
+    when(entityType.getPropertyNames()).thenReturn(Collections.<String>singletonList("DynamicCTProp"));
+    when(entityType.getProperty("DynamicCTProp")).thenReturn(property);
     when(entityType.isOpenType()).thenReturn(true);
+    when(entityType.getDynamicPropertyName()).thenReturn("DynamicProperties");
     return entityType;
   }
 
@@ -357,9 +374,9 @@ public class ODataJsonDeserializerEntityTest extends AbstractODataDeserializerTe
     List<Property> properties = entity.getProperties();
     assertNotNull(properties);
     assertEquals(1, properties.size());
-    assertNotNull(entity.getProperty("dynamicProperties"));
-    assertTrue(entity.getProperty("dynamicProperties").isComplex());
-    ComplexValue complexValue = entity.getProperty("dynamicProperties").asComplex();
+    assertNotNull(entity.getProperty("DynamicProperties"));
+    assertTrue(entity.getProperty("DynamicProperties").isComplex());
+    ComplexValue complexValue = entity.getProperty("DynamicProperties").asComplex();
     properties = complexValue.getValue();
     assertEquals(16, properties.size());
 
@@ -508,9 +525,9 @@ public class ODataJsonDeserializerEntityTest extends AbstractODataDeserializerTe
     assertNotNull(properties);
     assertEquals(1, properties.size());
 
-    assertNotNull(entity.getProperty("dynamicProperties"));
-    assertTrue(entity.getProperty("dynamicProperties").isComplex());
-    ComplexValue complexValue = entity.getProperty("dynamicProperties").asComplex();
+    assertNotNull(entity.getProperty("DynamicProperties"));
+    assertTrue(entity.getProperty("DynamicProperties").isComplex());
+    ComplexValue complexValue = entity.getProperty("DynamicProperties").asComplex();
     properties = complexValue.getValue();
     assertEquals(2, properties.size());
     assertEquals("PropertyInt16", properties.get(0).getName());
@@ -694,9 +711,9 @@ public class ODataJsonDeserializerEntityTest extends AbstractODataDeserializerTe
     List<Property> properties = entity.getProperties();
     assertNotNull(properties);
     assertEquals(1, properties.size());
-    assertNotNull(entity.getProperty("dynamicProperties"));
-    assertTrue(entity.getProperty("dynamicProperties").isComplex());
-    ComplexValue complexValue = entity.getProperty("dynamicProperties").asComplex();
+    assertNotNull(entity.getProperty("DynamicProperties"));
+    assertTrue(entity.getProperty("DynamicProperties").isComplex());
+    ComplexValue complexValue = entity.getProperty("DynamicProperties").asComplex();
     properties = complexValue.getValue();
     assertEquals(17, properties.size());
 
@@ -734,9 +751,9 @@ public class ODataJsonDeserializerEntityTest extends AbstractODataDeserializerTe
     List<Property> properties = entity.getProperties();
     assertNotNull(properties);
     assertEquals(1, properties.size());
-    assertNotNull(entity.getProperty("dynamicProperties"));
-    assertTrue(entity.getProperty("dynamicProperties").isComplex());
-    ComplexValue complexValue = entity.getProperty("dynamicProperties").asComplex();
+    assertNotNull(entity.getProperty("DynamicProperties"));
+    assertTrue(entity.getProperty("DynamicProperties").isComplex());
+    ComplexValue complexValue = entity.getProperty("DynamicProperties").asComplex();
     properties = complexValue.getValue();
     assertEquals(1, properties.size());
     assertEquals("CollPropertyComp", properties.get(0).getName());
@@ -749,6 +766,64 @@ public class ODataJsonDeserializerEntityTest extends AbstractODataDeserializerTe
       assertTrue(arrayElement instanceof ComplexValue);
       List<Property> castedArrayElement = ((ComplexValue) arrayElement).getValue();
       assertEquals(2, castedArrayElement.size());
+    }
+  }
+
+  @Test
+  public void openEntityOpenComplex() throws Exception {
+    EdmEntityType entityType = createOpenEntityType();
+    final String entityString = "{\"DynamicCTProp\":{"
+            + "\"CTPropInt16\":123,\"CTPropString\":\"TEST 1\","
+            + "\"CTPropCollInt16@odata.type\":\"#Collection(Int16)\","
+            + "\"CTPropCollInt16\":[123, 456],"
+            + "\"CTProp@odata.type\":\"#olingo.odata.test1.CTTwoPrim\","
+            + "\"CTProp\":"
+            + "{\"PropertyInt16\":123,\"PropertyString\":\"TEST 1\"},"
+            + "\"CTPropCollComp@odata.type\":\"#Collection(olingo.odata.test1.CTTwoPrim)\","
+            + "\"CTPropCollComp\":["
+            + "{\"PropertyInt16\":456,\"PropertyString\":\"TEST 2\"},"
+            + "{\"PropertyInt16\":789,\"PropertyString\":\"TEST 3\"}]}}";
+
+    final Entity entity = OData.newInstance().createDeserializer(ContentType.JSON, metadata)
+            .entity(new ByteArrayInputStream(entityString.getBytes()), entityType)
+            .getEntity();
+    assertNotNull(entity);
+
+    List<Property> properties = entity.getProperties();
+    assertNotNull(properties);
+    assertEquals(1, properties.size());
+    assertNotNull(entity.getProperty("DynamicCTProp"));
+    assertTrue(entity.getProperty("DynamicCTProp").isComplex());
+    ComplexValue complexValue = entity.getProperty("DynamicCTProp").asComplex();
+    properties = complexValue.getValue();
+    assertEquals(1, properties.size());
+
+    assertNotNull(properties.get(0));
+    assertEquals("Properties", properties.get(0).getName());
+    assertTrue(properties.get(0).isComplex());
+    complexValue = properties.get(0).asComplex();
+    properties = complexValue.getValue();
+    assertEquals(5, properties.size());
+    for (Property prop : properties) {
+      if (prop.getName().equals("CTPropInt16")) {
+        assertEquals(123, prop.getValue());
+      } else if (prop.getName().equals("CTPropString")) {
+        assertEquals("TEST 1", prop.getValue());
+      } else if (prop.getName().equals("CTPropCollInt16")) {
+        assertEquals(2, prop.asCollection().size());
+        List<Short> list = (List<Short>) prop.asCollection();
+        assertThat(list, hasItems((short) 123, (short) 456));
+      } else if (prop.getName().equals("CTProp")) {
+        ComplexValue cv = new ComplexValue();
+        cv.getValue().add(new Property("Edm.Int16", "PropertyInt16", ValueType.PRIMITIVE, (short) 123));
+        cv.getValue().add(new Property("Edm.String", "PropertyString", ValueType.PRIMITIVE, "TEST 1"));
+        assertEquals(cv, prop.getValue());
+      } else if (prop.getName().equals("CTPropCollComp")) {
+        assertEquals(ValueType.COLLECTION_COMPLEX, prop.getValueType());
+        assertEquals(2, prop.asCollection().size());
+      } else {
+        fail("invalid property.");
+      }
     }
   }
 

@@ -331,91 +331,53 @@ public class ODataJsonDeserializer implements ODataDeserializer {
     // remove here to avoid iterator issues.
     node.remove(toRemove);
 
-    if (edmEntityType.isOpenType()) {
-      consumeDynamicEntityProperties(node, entity);
-    }
     removeAnnotations(node);
+    List<Property> dynamicProperties = readNonAnnotatedDynamicProperties(edmEntityType, node);
+    if (!dynamicProperties.isEmpty()) {
+      Property dynamicProperty = entity.getProperty(edmEntityType.getDynamicPropertyName());
+      if (dynamicProperty == null) {
+        entity.addProperty(createDynamicProperty(edmEntityType.getDynamicPropertyName(), dynamicProperties));
+      } else {
+        ComplexValue complexValue = dynamicProperty.asComplex();
+        complexValue.getValue().addAll(dynamicProperties);
+      }
+    }
   }
 
-  /**
-   * Consume remaining dynamic properties.
-   *
-   * @param node node json node which is consumed
-   * @param entity entity instance which is filled
-   * @throws DeserializerException if an exception during consumation occurs
-   */
-  private void consumeDynamicEntityProperties(final ObjectNode node, final Entity entity)
-          throws DeserializerException {
-    ComplexValue complexValue = new ComplexValue();
-    List<String> toRemove = new ArrayList<String>();
-    Iterator<Entry<String, JsonNode>> fieldsIterator = node.fields();
-    while (fieldsIterator.hasNext()) {
-      Entry<String, JsonNode> field = fieldsIterator.next();
-
-      // find all odata type annotations, and parse associated properties
-      if (field.getValue().isValueNode()) {
-        int index = field.getKey().indexOf(Constants.JSON_TYPE);
-        if (index >= 0) {
-          String propertyName = field.getKey().substring(0, index);
-          if (!propertyName.isEmpty()) {
-            JsonNode jsonNode = node.get(propertyName);
-            if (jsonNode == null) {
-              throw new DeserializerException("property: " + propertyName + " has property annotations but not value.",
-                      MessageKeys.INVALID_NULL_PARAMETER, propertyName);
-            }
-            String typeName = trimStart(field.getValue().asText(), "#");
-
-            Matcher matcher = ODATA_COLLECTION_PATTERN.matcher(typeName);
-            boolean isCollection = matcher.find();
-            if (isCollection) {
-              typeName = matcher.group(1);
-            }
-            EdmType type = getEdmTypeFromTypeAnnotationValue(typeName);
-            // ignore if type cannot be determined
-            if (type != null) {
-              Property property = consumePropertyNode(propertyName, type, isCollection, true, null, null, null, true, null,
-                      jsonNode);
-              complexValue.getValue().add(property);
-              toRemove.add(propertyName);
-            }
+  private List<Property> readNonAnnotatedDynamicProperties(final EdmStructuredType edmStructuredType,
+                                                           final ObjectNode node) throws DeserializerException {
+    List<Property> dynamicProperties = new ArrayList<Property>();
+    if (edmStructuredType.isOpenType()) {
+      List<String> toRemove = new ArrayList<String>();
+      Iterator<Entry<String, JsonNode>> fieldsIterator = node.fields();
+      while (fieldsIterator.hasNext()) {
+        Entry<String, JsonNode> field = fieldsIterator.next();
+        if (field.getValue().isObject()) {
+          Property property = new Property();
+          property.setName(field.getKey());
+          consumeDynamicJsonObject((ObjectNode) field.getValue(), property);
+          dynamicProperties.add(property);
+          toRemove.add(field.getKey());
+        } else {
+          JsonNode jsonNode = field.getValue();
+          if (jsonNode.isNull()) {
+            dynamicProperties.add(new Property(null, field.getKey(), ValueType.PRIMITIVE, null));
+            toRemove.add(field.getKey());
+            continue;
           }
-          toRemove.add(field.getKey());
+          EdmType type = inferPrimTypeFromJsonNode(jsonNode, field.getKey());
+          // ignore if type cannot be determined
+          if (type != null) {
+            Property property = consumePropertyNode(field.getKey(), type, false, true, null, null, null, true, null,
+                    jsonNode);
+            dynamicProperties.add(property);
+            toRemove.add(field.getKey());
+          }
         }
       }
+      node.remove(toRemove);
     }
-    node.remove(toRemove);
-
-    fieldsIterator = node.fields();
-    toRemove.clear();
-    // loop through remaining properties
-    while (fieldsIterator.hasNext()) {
-      Entry<String, JsonNode> field = fieldsIterator.next();
-      if (field.getValue().isObject()) {
-        Property property = new Property();
-        property.setName(field.getKey());
-        consumeDynamicJsonObject((ObjectNode) field.getValue(), property);
-        complexValue.getValue().add(property);
-        toRemove.add(field.getKey());
-      } else {
-        JsonNode jsonNode = field.getValue();
-        if (jsonNode.isNull()) {
-          complexValue.getValue().add(new Property(null, field.getKey(), ValueType.PRIMITIVE, null));
-          toRemove.add(field.getKey());
-          continue;
-        }
-        EdmType type = inferPrimTypeFromJsonNode(jsonNode, field.getKey());
-        // ignore if type cannot be determined
-        if (type != null) {
-          Property property = consumePropertyNode(field.getKey(), type, false, true, null, null, null, true, null,
-                  jsonNode);
-          complexValue.getValue().add(property);
-          toRemove.add(field.getKey());
-        }
-      }
-    }
-
-    entity.addProperty(new Property(null, "dynamicProperties", ValueType.COMPLEX, complexValue));
-    node.remove(toRemove);
+    return dynamicProperties;
   }
 
   private String trimStart(String str, String stripChars) {
@@ -516,6 +478,59 @@ public class ODataJsonDeserializer implements ODataDeserializer {
         node.remove(propertyName);
       }
     }
+    List<Property> dynamicProperties = readDynamicTypeAnnotations(edmEntityType, node);
+    if (!dynamicProperties.isEmpty()) {
+      entity.addProperty(createDynamicProperty(edmEntityType.getDynamicPropertyName(), dynamicProperties));
+    }
+  }
+
+  private List<Property> readDynamicTypeAnnotations(final EdmStructuredType edmStructuredType, final ObjectNode node)
+          throws DeserializerException{
+    List<Property> dynamicProperties = new ArrayList<Property>();
+
+    if (edmStructuredType.isOpenType()) {
+      List<String> toRemove = new ArrayList<String>();
+      Iterator<Entry<String, JsonNode>> iterator = node.fields();
+      while (iterator.hasNext()) {
+        Entry<String, JsonNode> field = iterator.next();
+        if (field.getValue().isValueNode()) {
+          int index = field.getKey().indexOf(Constants.JSON_TYPE);
+          if (index >= 0) {
+            String propertyName = field.getKey().substring(0, index);
+            if (!propertyName.isEmpty()) {
+              JsonNode jsonNode = node.get(propertyName);
+              if (jsonNode == null) {
+                throw new DeserializerException("property: " + propertyName + " has property annotations but not value.",
+                        MessageKeys.INVALID_NULL_PARAMETER, propertyName);
+              }
+              String typeName = trimStart(field.getValue().asText(), "#");
+
+              Matcher matcher = ODATA_COLLECTION_PATTERN.matcher(typeName);
+              boolean isCollection = matcher.find();
+              if (isCollection) {
+                typeName = matcher.group(1);
+              }
+              EdmType type = getEdmTypeFromTypeAnnotationValue(typeName);
+              // ignore if type cannot be determined
+              if (type != null) {
+                Property property = consumePropertyNode(propertyName, type, isCollection, true, null,
+                        null, null, true, null, jsonNode);
+                dynamicProperties.add(property);
+                toRemove.add(propertyName);
+              }
+            }
+          }
+        }
+      }
+      node.remove(toRemove);
+    }
+    return dynamicProperties;
+  }
+  private Property createDynamicProperty(String dynamicPropertyName, List<Property> dynamicProperties) {
+    ComplexValue complexValue = new ComplexValue();
+    complexValue.getValue().addAll(dynamicProperties);
+    Property property = new Property(null, dynamicPropertyName, ValueType.COMPLEX, complexValue);
+    return property;
   }
 
   private void consumeExpandedNavigationProperties(final EdmEntityType edmEntityType, final ObjectNode node,
@@ -684,8 +699,28 @@ public class ODataJsonDeserializer implements ODataDeserializer {
     ComplexValue value = readComplexValue(name, type, isNullable, jsonNode);
 
     if (jsonNode.isObject()) {
-      removeAnnotations((ObjectNode) jsonNode);
+      ObjectNode node = (ObjectNode) jsonNode;
+      removeAnnotations(node);
+
+      EdmComplexType edmComplexType = (EdmComplexType) type;
+      List<Property> dynamicProperties = readNonAnnotatedDynamicProperties(edmComplexType, node);
+      if (!dynamicProperties.isEmpty()) {
+        Property dynamicProperty = null;
+        for (Property property : value.getValue()) {
+          if (edmComplexType.getDynamicPropertyName().equals(property.getName())) {
+            dynamicProperty = property;
+            break;
+          }
+        }
+        if (dynamicProperty == null) {
+          value.getValue().add(createDynamicProperty(edmComplexType.getDynamicPropertyName(), dynamicProperties));
+        } else {
+          ComplexValue complexValue = dynamicProperty.asComplex();
+          complexValue.getValue().addAll(dynamicProperties);
+        }
+      }
     }
+
     // Afterwards the node must be empty
     assertJsonNodeIsEmpty(jsonNode);
 
@@ -759,6 +794,10 @@ public class ODataJsonDeserializer implements ODataDeserializer {
         complexValue.getValue().add(property);
         ((ObjectNode) jsonNode).remove(propertyName);
       }
+    }
+    List<Property> dynamicProperties = readDynamicTypeAnnotations(edmType, (ObjectNode) jsonNode);
+    if (!dynamicProperties.isEmpty()) {
+      complexValue.getValue().add(createDynamicProperty(edmType.getDynamicPropertyName(), dynamicProperties));
     }
     return complexValue;
   }

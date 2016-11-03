@@ -185,4 +185,9 @@ public abstract class AbstractEdmStructuredType extends EdmTypeImpl implements E
   public boolean isAbstract() {
     return providerStructuredType.isAbstract();
   }
+
+  @Override
+  public String getDynamicPropertyName() {
+    return providerStructuredType.getDynamicPropertyName();
+  }
 }
