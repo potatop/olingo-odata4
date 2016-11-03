@@ -20,10 +20,10 @@ package org.apache.olingo.server.core.serializer.json;
 
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.sql.Timestamp;
+import java.util.*;
 
 import org.apache.olingo.commons.api.Constants;
 import org.apache.olingo.commons.api.data.AbstractEntityCollection;
@@ -35,19 +35,12 @@ import org.apache.olingo.commons.api.data.Link;
 import org.apache.olingo.commons.api.data.Linked;
 import org.apache.olingo.commons.api.data.Operation;
 import org.apache.olingo.commons.api.data.Property;
-import org.apache.olingo.commons.api.edm.EdmComplexType;
-import org.apache.olingo.commons.api.edm.EdmEntitySet;
-import org.apache.olingo.commons.api.edm.EdmEntityType;
-import org.apache.olingo.commons.api.edm.EdmNavigationProperty;
-import org.apache.olingo.commons.api.edm.EdmPrimitiveType;
-import org.apache.olingo.commons.api.edm.EdmPrimitiveTypeException;
-import org.apache.olingo.commons.api.edm.EdmPrimitiveTypeKind;
-import org.apache.olingo.commons.api.edm.EdmProperty;
-import org.apache.olingo.commons.api.edm.EdmStructuredType;
-import org.apache.olingo.commons.api.edm.EdmType;
-import org.apache.olingo.commons.api.edm.FullQualifiedName;
+import org.apache.olingo.commons.api.data.ValueType;
+import org.apache.olingo.commons.api.edm.*;
 import org.apache.olingo.commons.api.edm.constants.EdmTypeKind;
+import org.apache.olingo.commons.api.edm.provider.CsdlProperty;
 import org.apache.olingo.commons.api.format.ContentType;
+import org.apache.olingo.commons.core.edm.EdmPropertyImpl;
 import org.apache.olingo.commons.core.edm.primitivetype.EdmPrimitiveTypeFactory;
 import org.apache.olingo.server.api.ODataServerError;
 import org.apache.olingo.server.api.ServiceMetadata;
@@ -456,6 +449,84 @@ public class ODataJsonSerializer extends AbstractODataSerializer {
         writeProperty(metadata, edmProperty, property, selectedPaths, json);
       }
     }
+    writeDynamicProperties(metadata, type, properties, json);
+  }
+
+  private void writeDynamicProperties(final ServiceMetadata metadata, final EdmStructuredType type,
+      final List<Property> properties, final JsonGenerator json) throws IOException, SerializerException {
+    if (type.isOpenType()) {
+      final Property dynamicProperty = findProperty(type.getDynamicPropertyName(), properties);
+      if (dynamicProperty != null && dynamicProperty.getValueType() == ValueType.COMPLEX) {
+        ComplexValue complexValue = dynamicProperty.asComplex();
+        List<Property> dynamicProperties = complexValue.getValue();
+        for (Property prop : dynamicProperties) {
+          final EdmProperty edmProperty = resolveDynamicPropertyModel(metadata, prop);
+          if (edmProperty != null) {
+            writeProperty(metadata, edmProperty, prop, null, json, true);
+          }
+        }
+      }
+    }
+  }
+  private EdmProperty resolveDynamicPropertyModel(final ServiceMetadata metadata, final Property property)
+      throws SerializerException {
+    String typeName = property.getType();
+    if ((typeName == null || typeName.isEmpty()) && property.isPrimitive()) {
+      Object value = property.getValue();
+      if (value != null) {
+        if (!property.isCollection()) {
+          typeName = mapObjectToEdmPrimitiveTypeString(value);
+        } else {
+          List<?> list = (List<?>) value;
+          if (!list.isEmpty()) {
+            typeName = mapObjectToEdmPrimitiveTypeString(list.get(0));
+          } else {
+            typeName = EdmPrimitiveTypeKind.String.getFullQualifiedName().getFullQualifiedNameAsString();
+          }
+        }
+      } else {
+        // default to string
+        typeName = EdmPrimitiveTypeKind.String.getFullQualifiedName().getFullQualifiedNameAsString();
+      }
+    }
+    if (typeName == null || typeName.isEmpty()) {
+      throw new SerializerException("EntityType cannot be found",
+              SerializerException.MessageKeys.UNKNOWN_TYPE, property.getName());
+    }
+    final CsdlProperty csdlProperty = new CsdlProperty()
+            .setName(property.getName())
+            .setType(typeName)
+            .setNullable(true)
+            .setCollection(property.isCollection());
+
+    return new EdmPropertyImpl(metadata.getEdm(), csdlProperty);
+  }
+
+  private String mapObjectToEdmPrimitiveTypeString(final Object object) {
+    if (object instanceof Short ||
+            object instanceof Integer ||
+            object instanceof Long ||
+            object instanceof Byte ||
+            object instanceof BigInteger) {
+      return EdmPrimitiveTypeKind.Int64.getFullQualifiedName().getFullQualifiedNameAsString();
+    } else if (object instanceof String) {
+      return EdmPrimitiveTypeKind.String.getFullQualifiedName().getFullQualifiedNameAsString();
+    } else if (object instanceof Byte[] || object instanceof byte[]) {
+      return EdmPrimitiveTypeKind.Binary.getFullQualifiedName().getFullQualifiedNameAsString();
+    } else if (object instanceof Boolean) {
+      return EdmPrimitiveTypeKind.Boolean.getFullQualifiedName().getFullQualifiedNameAsString();
+    } else if (object instanceof Timestamp) {
+      return EdmPrimitiveTypeKind.DateTimeOffset.getFullQualifiedName().getFullQualifiedNameAsString();
+    } else if (object instanceof Date || object instanceof Calendar) {
+      return EdmPrimitiveTypeKind.Date.getFullQualifiedName().getFullQualifiedNameAsString();
+    } else if (object instanceof BigDecimal) {
+      return EdmPrimitiveTypeKind.Decimal.getFullQualifiedName().getFullQualifiedNameAsString();
+    } else if (object instanceof Float || object instanceof Double) {
+      return EdmPrimitiveTypeKind.Double.getFullQualifiedName().getFullQualifiedNameAsString();
+    } else if (object instanceof UUID) {
+      return EdmPrimitiveTypeKind.Guid.getFullQualifiedName().getFullQualifiedNameAsString();
+    }
+    return null;
   }
 
   protected void writeNavigationProperties(final ServiceMetadata metadata,
@@ -583,6 +654,13 @@ public class ODataJsonSerializer extends AbstractODataSerializer {
   protected void writeProperty(final ServiceMetadata metadata,
       final EdmProperty edmProperty, final Property property,
       final Set<List<String>> selectedPaths, final JsonGenerator json)
+          throws IOException, SerializerException {
+    writeProperty(metadata, edmProperty, property, selectedPaths, json, false);
+  }
+
+  protected void writeProperty(final ServiceMetadata metadata,
+      final EdmProperty edmProperty, final Property property,
+      final Set<List<String>> selectedPaths, final JsonGenerator json, final boolean isDynamicProp)
       throws IOException, SerializerException {
     boolean isStreamProperty = isStreamProperty(edmProperty);
     writePropertyType(edmProperty, json);
@@ -604,10 +682,10 @@ public class ODataJsonSerializer extends AbstractODataSerializer {
         }
       }
     } else {
-      writePropertyValue(metadata, edmProperty, property, selectedPaths, json);
+      writePropertyValue(metadata, edmProperty, property, selectedPaths, json, isDynamicProp);
     }
   }
-  
+
   private void writePropertyType(final EdmProperty edmProperty, JsonGenerator json)
       throws SerializerException, IOException {
     if (!isODataMetadataFull) {
@@ -646,8 +724,8 @@ public class ODataJsonSerializer extends AbstractODataSerializer {
   }
 
   private void writePropertyValue(final ServiceMetadata metadata, final EdmProperty edmProperty,
-      final Property property, final Set<List<String>> selectedPaths, final JsonGenerator json)
-      throws IOException, SerializerException {
+      final Property property, final Set<List<String>> selectedPaths, final JsonGenerator json,
+      final boolean isDynamicProp) throws IOException, SerializerException {
     final EdmType type = edmProperty.getType();
     try {
       if (edmProperty.isPrimitive()
@@ -663,9 +741,9 @@ public class ODataJsonSerializer extends AbstractODataSerializer {
         }
       } else if (property.isComplex()) {
         if (edmProperty.isCollection()) {
-          writeComplexCollection(metadata, (EdmComplexType) type, property, selectedPaths, json);
+          writeComplexCollection(metadata, (EdmComplexType) type, property, selectedPaths, json, isDynamicProp);
         } else {
-         writeComplex(metadata, (EdmComplexType) type, property, selectedPaths, json);
+         writeComplex(metadata, (EdmComplexType) type, property, selectedPaths, json, isDynamicProp);
         }
       } else {
         throw new SerializerException("Property type not yet supported!",
@@ -679,12 +757,13 @@ public class ODataJsonSerializer extends AbstractODataSerializer {
   }
 
   private void writeComplex(final ServiceMetadata metadata, final EdmComplexType type,
-      final Property property, final Set<List<String>> selectedPaths, final JsonGenerator json) 
-          throws IOException, SerializerException{
+      final Property property, final Set<List<String>> selectedPaths, final JsonGenerator json,
+      final boolean isDynamicProp)
+          throws IOException, SerializerException {
         json.writeStartObject();        
         String derivedName = property.getType();
         final EdmComplexType resolvedType = resolveComplexType(metadata, type, derivedName);
-        if (!isODataMetadataNone && !resolvedType.equals(type) || isODataMetadataFull) {
+        if (!isODataMetadataNone && !resolvedType.equals(type) || isODataMetadataFull || isDynamicProp) {
            json.writeStringField(Constants.JSON_TYPE, "#" + property.getType());
         }          
         writeComplexValue(metadata, resolvedType, property.asComplex().getValue(), selectedPaths,
@@ -723,14 +802,14 @@ public class ODataJsonSerializer extends AbstractODataSerializer {
 
   private void writeComplexCollection(final ServiceMetadata metadata, final EdmComplexType type,
       final Property property,
-      final Set<List<String>> selectedPaths, final JsonGenerator json)
+      final Set<List<String>> selectedPaths, final JsonGenerator json, final boolean isDynamicProp)
       throws IOException, SerializerException {
     json.writeStartArray();
     for (Object value : property.asCollection()) {
       switch (property.getValueType()) {
       case COLLECTION_COMPLEX:
         json.writeStartObject();
-        if (isODataMetadataFull) {
+        if (isODataMetadataFull || isDynamicProp) {
              json.writeStringField(Constants.JSON_TYPE, "#" + 
                      type.getFullQualifiedName().getFullQualifiedNameAsString());
         }
@@ -821,6 +900,7 @@ public class ODataJsonSerializer extends AbstractODataSerializer {
             json);
       }
     }
+    writeDynamicProperties(metadata, type, properties, json);
   }
 
   private Property findProperty(final String propertyName, final List<Property> properties) {
@@ -972,7 +1052,7 @@ public class ODataJsonSerializer extends AbstractODataSerializer {
       }
       writeOperations(property.getOperations(), json);
       json.writeFieldName(Constants.VALUE);
-      writeComplexCollection(metadata, type, property, null, json);
+      writeComplexCollection(metadata, type, property, null, json, false);
       json.writeEndObject();
 
       json.close();

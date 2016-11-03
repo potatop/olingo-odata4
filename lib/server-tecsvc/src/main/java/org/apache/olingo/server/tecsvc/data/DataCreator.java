@@ -1444,7 +1444,7 @@ public class DataCreator {
     return property;
   }
 
-  private static Calendar getDateTime(final int year, final int month, final int day,
+  public static Calendar getDateTime(final int year, final int month, final int day,
       final int hour, final int minute, final int second) {
     // Date/Time values are serialized with a timezone offset, so we choose a predictable timezone.
     Calendar dateTime = Calendar.getInstance(TimeZone.getTimeZone("GMT"));

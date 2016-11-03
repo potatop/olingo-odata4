@@ -39,28 +39,14 @@ import org.apache.olingo.commons.api.data.Link;
 import org.apache.olingo.commons.api.data.Parameter;
 import org.apache.olingo.commons.api.data.Property;
 import org.apache.olingo.commons.api.data.ValueType;
-import org.apache.olingo.commons.api.edm.EdmAction;
-import org.apache.olingo.commons.api.edm.EdmComplexType;
-import org.apache.olingo.commons.api.edm.EdmEntityType;
-import org.apache.olingo.commons.api.edm.EdmEnumType;
-import org.apache.olingo.commons.api.edm.EdmMapping;
-import org.apache.olingo.commons.api.edm.EdmNavigationProperty;
-import org.apache.olingo.commons.api.edm.EdmParameter;
-import org.apache.olingo.commons.api.edm.EdmPrimitiveType;
-import org.apache.olingo.commons.api.edm.EdmPrimitiveTypeException;
-import org.apache.olingo.commons.api.edm.EdmPrimitiveTypeKind;
-import org.apache.olingo.commons.api.edm.EdmProperty;
-import org.apache.olingo.commons.api.edm.EdmStructuredType;
-import org.apache.olingo.commons.api.edm.EdmType;
-import org.apache.olingo.commons.api.edm.EdmTypeDefinition;
-import org.apache.olingo.commons.api.edm.FullQualifiedName;
+import org.apache.olingo.commons.api.edm.*;
 import org.apache.olingo.commons.api.edm.constants.EdmTypeKind;
 import org.apache.olingo.commons.api.format.ContentType;
+import org.apache.olingo.commons.core.edm.EdmTypeInfo;
 import org.apache.olingo.commons.core.edm.primitivetype.EdmBoolean;
 import org.apache.olingo.commons.core.edm.primitivetype.EdmDouble;
 import org.apache.olingo.commons.core.edm.primitivetype.EdmInt32;
 import org.apache.olingo.commons.core.edm.primitivetype.EdmInt64;
-import org.apache.olingo.commons.core.edm.primitivetype.EdmPrimitiveTypeFactory;
 import org.apache.olingo.commons.core.edm.primitivetype.EdmString;
 import org.apache.olingo.server.api.ServiceMetadata;
 import org.apache.olingo.server.api.deserializer.DeserializerException;
@@ -402,7 +388,13 @@ public class ODataJsonDeserializer implements ODataDeserializer {
     JsonNode odataTypeNode = node.get(Constants.JSON_TYPE);
     if (odataTypeNode != null) {
       String odataType = trimStart(odataTypeNode.asText(), "#");
-      type = getEdmTypeFromTypeAnnotationValue(odataType);
+      try {
+        type = getEdmTypeFromTypeName(serviceMetadata.getEdm(), odataType);
+      } catch (NullPointerException e) {
+        throw new DeserializerException(
+            "Failed to resolve Odata type " + odataType + " due to metadata is not available",
+            DeserializerException.MessageKeys.UNKNOWN_CONTENT);
+      }
     }
     if (type == null) {
       throw new DeserializerException("Property with untyped value: " + node.toString()  + " is invalid."
@@ -429,34 +421,13 @@ public class ODataJsonDeserializer implements ODataDeserializer {
     return type;
   }
 
-  private EdmType getEdmTypeFromTypeAnnotationValue(String typeName) throws DeserializerException
+  private static EdmType getEdmTypeFromTypeName(Edm edm, String typeName)
   {
-    EdmType type;
-    if (typeName.contains(".")) {
-      FullQualifiedName fqn = new FullQualifiedName(typeName);
-      if (fqn.getNamespace().equals(EdmPrimitiveType.EDM_NAMESPACE)) {
-        EdmPrimitiveTypeKind kind = EdmPrimitiveTypeKind.valueOfFQN(fqn);
-        type = EdmPrimitiveTypeFactory.getInstance(kind);
-      } else if (serviceMetadata == null) {
-        throw new DeserializerException(
-                "Failed to resolve Odata type " + typeName + " due to metadata is not available",
-                DeserializerException.MessageKeys.UNKNOWN_CONTENT);
-      } else {
-        type = serviceMetadata.getEdm().getEntityType(fqn);
-        if (type == null) {
-          type = serviceMetadata.getEdm().getComplexType(fqn);
-        }
-      }
-    } else {
-      // check if it is primitive
-      try {
-        EdmPrimitiveTypeKind kind = EdmPrimitiveTypeKind.valueOf(typeName);
-        type = EdmPrimitiveTypeFactory.getInstance(kind);
-      } catch (IllegalArgumentException e) {
-        type = null;
-      }
+    if (typeName == null || typeName.isEmpty()) {
+      return null;
     }
-    return type;
+    EdmTypeInfo typeInfo = new EdmTypeInfo.Builder().setEdm(edm).setTypeExpression(typeName).build();
+    return typeInfo.getType();
   }
 
   private void consumeEntityProperties(final EdmEntityType edmEntityType, final ObjectNode node,
@@ -510,13 +481,19 @@ public class ODataJsonDeserializer implements ODataDeserializer {
               if (isCollection) {
                 typeName = matcher.group(1);
               }
-              EdmType type = getEdmTypeFromTypeAnnotationValue(typeName);
-              // ignore if type cannot be determined
-              if (type != null) {
-                Property property = consumePropertyNode(propertyName, type, isCollection, true, null,
-                        null, null, true, null, jsonNode);
-                dynamicProperties.add(property);
-                toRemove.add(propertyName);
+              try {
+                EdmType type = getEdmTypeFromTypeName(serviceMetadata.getEdm(), typeName);
+                // ignore if type cannot be determined
+                if (type != null) {
+                  Property property = consumePropertyNode(propertyName, type, isCollection, true, null,
+                          null, null, true, null, jsonNode);
+                  dynamicProperties.add(property);
+                  toRemove.add(propertyName);
+                }
+              } catch (NullPointerException e) {
+                throw new DeserializerException(
+                    "Failed to resolve Odata type " + typeName + " due to metadata is not available",
+                    DeserializerException.MessageKeys.UNKNOWN_CONTENT);
               }
             }
           }

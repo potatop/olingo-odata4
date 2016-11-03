@@ -20,13 +20,12 @@ package org.apache.olingo.server.core.serializer.json;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.math.BigDecimal;
 import java.net.URI;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.List;
+import java.sql.Timestamp;
+import java.util.*;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.output.ByteArrayOutputStream;
@@ -70,12 +69,16 @@ import org.apache.olingo.server.api.uri.queryoption.SelectItem;
 import org.apache.olingo.server.api.uri.queryoption.SelectOption;
 import org.apache.olingo.server.core.serializer.ExpandSelectMock;
 import org.apache.olingo.server.tecsvc.MetadataETagSupport;
+import org.apache.olingo.server.tecsvc.data.DataCreator;
 import org.apache.olingo.server.tecsvc.data.DataProvider;
 import org.apache.olingo.server.tecsvc.provider.EdmTechProvider;
 import org.hamcrest.CoreMatchers;
 import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.Mockito;
+
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.spy;
 
 public class ODataJsonSerializerTest {
   private static final OData odata = OData.newInstance();
@@ -121,7 +124,133 @@ public class ODataJsonSerializerTest {
         + "}";
     Assert.assertEquals(expectedResult, resultString);
   }
-  
+
+  @Test
+  public void openEntitySimple() throws Exception {
+    final EdmEntitySet edmEntitySet = entityContainer.getEntitySet("ESTwoPrim");
+    Entity entity = new Entity();
+    entity.setType(edmEntitySet.getEntityType().getFullQualifiedName().getFullQualifiedNameAsString());
+    entity.setId(new URI("ESTwoPrim(32767)"));
+    entity.addProperty(new Property("Edm.Int16", "PropertyInt16", ValueType.PRIMITIVE, Short.MAX_VALUE));
+    ComplexValue complexValue = new ComplexValue();
+    complexValue.getValue().add(new Property("Edm.Int16", "DynPropInt16", ValueType.PRIMITIVE, (short) 123));
+    complexValue.getValue().add(new Property("Edm.String", "DynPropString", ValueType.PRIMITIVE,
+            "First Resource - positive values"));
+    complexValue.getValue().add(new Property("Edm.Boolean", "DynPropBoolean", ValueType.PRIMITIVE, true));
+    complexValue.getValue().add(new Property("Edm.Byte", "DynPropByte", ValueType.PRIMITIVE, 255));
+    complexValue.getValue().add(new Property("Edm.SByte", "DynPropSByte", ValueType.PRIMITIVE, Byte.MAX_VALUE));
+    complexValue.getValue().add(new Property("Edm.Int32", "DynPropInt32", ValueType.PRIMITIVE, Integer.MAX_VALUE));
+    complexValue.getValue().add(new Property("Edm.Int64", "DynPropInt64", ValueType.PRIMITIVE, Long.MAX_VALUE));
+    complexValue.getValue().add(new Property("Edm.Single", "DynPropSingle", ValueType.PRIMITIVE,
+            (float) 1.79000000E+20));
+    complexValue.getValue().add(new Property("Edm.Double", "DynPropDouble", ValueType.PRIMITIVE,
+            -1.7900000000000000E+19));
+    complexValue.getValue().add(new Property("Edm.Decimal", "DynPropDecimal", ValueType.PRIMITIVE,
+            BigDecimal.valueOf(34)));
+    complexValue.getValue().add(new Property("Edm.Binary", "DynPropBinary", ValueType.PRIMITIVE,
+            new byte[] {0x01, 0x23, 0x45, 0x67, (byte) 0x89, (byte) 0xAB, (byte) 0xCD, (byte) 0xEF}));
+    complexValue.getValue().add(new Property("Edm.Date", "DynPropDate", ValueType.PRIMITIVE,
+            DataCreator.getDateTime(2012, 12, 3, 0 , 0, 0)));
+    complexValue.getValue().add(new Property("Edm.DateTimeOffset", "DynPropDateTimeOffset", ValueType.PRIMITIVE,
+            DataCreator.getDateTime(2012, 12, 3, 7, 16, 23)));
+    complexValue.getValue().add(new Property("Edm.Duration", "DynPropDuration", ValueType.PRIMITIVE,
+            BigDecimal.valueOf(6)));
+    complexValue.getValue().add(new Property("Edm.Guid", "DynPropGuid", ValueType.PRIMITIVE,
+            UUID.fromString("01234567-89ab-cdef-0123-456789abcdef")));
+    complexValue.getValue().add(new Property("Edm.TimeOfDay", "DynPropTimeOfDay", ValueType.PRIMITIVE,
+            DataCreator.getDateTime(1970, 0, 1, 3, 26, 5)));
+    entity.addProperty(new Property(null, "DynamicProperties", ValueType.COMPLEX, complexValue));
+    EdmEntityType entityType = spy(edmEntitySet.getEntityType());
+    doReturn(true).when(entityType).isOpenType();
+
+    InputStream result = serializer.entity(metadata, entityType, entity,
+            EntitySerializerOptions.with()
+                    .contextURL(ContextURL.with().entitySet(edmEntitySet).suffix(Suffix.ENTITY).build())
+                    .build()).getContent();
+    final String resultString = IOUtils.toString(result);
+    final String expectedResult = "{\"@odata.context\":\"$metadata#ESTwoPrim/$entity\","
+            + "\"@odata.metadataEtag\":\"W/\\\"metadataETag\\\"\","
+            + "\"PropertyInt16\":32767,"
+            + "\"PropertyString\":null,"
+            + "\"DynPropInt16\":123,"
+            + "\"DynPropString\":\"First Resource - positive values\","
+            + "\"DynPropBoolean\":true,"
+            + "\"DynPropByte\":255,"
+            + "\"DynPropSByte\":127,"
+            + "\"DynPropInt32\":2147483647,"
+            + "\"DynPropInt64\":9223372036854775807,"
+            + "\"DynPropSingle\":1.79E20,"
+            + "\"DynPropDouble\":-1.79E19,"
+            + "\"DynPropDecimal\":34,"
+            + "\"DynPropBinary\":\"ASNFZ4mrze8=\","
+            + "\"DynPropDate\":\"2012-12-03\","
+            + "\"DynPropDateTimeOffset\":\"2012-12-03T07:16:23Z\","
+            + "\"DynPropDuration\":\"PT6S\","
+            + "\"DynPropGuid\":\"01234567-89ab-cdef-0123-456789abcdef\","
+            + "\"DynPropTimeOfDay\":\"03:26:05\"}";
+    Assert.assertEquals(expectedResult, resultString);
+  }
+
+  @Test
+  public void openEntitySimpleNoPropType() throws Exception {
+    final EdmEntitySet edmEntitySet = entityContainer.getEntitySet("ESTwoPrim");
+    Entity entity = new Entity();
+    entity.setType(edmEntitySet.getEntityType().getFullQualifiedName().getFullQualifiedNameAsString());
+    entity.setId(new URI("ESTwoPrim(32767)"));
+    entity.addProperty(new Property("Edm.Int16", "PropertyInt16", ValueType.PRIMITIVE, Short.MAX_VALUE));
+    ComplexValue complexValue = new ComplexValue();
+    complexValue.getValue().add(new Property(null, "DynPropInt16", ValueType.PRIMITIVE, (short) 123));
+    complexValue.getValue().add(new Property(null, "DynPropString", ValueType.PRIMITIVE,
+            "First Resource - positive values"));
+    complexValue.getValue().add(new Property(null, "DynPropBoolean", ValueType.PRIMITIVE, true));
+    complexValue.getValue().add(new Property(null, "DynPropByte", ValueType.PRIMITIVE, 255));
+    complexValue.getValue().add(new Property(null, "DynPropSByte", ValueType.PRIMITIVE, Byte.MAX_VALUE));
+    complexValue.getValue().add(new Property(null, "DynPropInt32", ValueType.PRIMITIVE, Integer.MAX_VALUE));
+    complexValue.getValue().add(new Property(null, "DynPropInt64", ValueType.PRIMITIVE, Long.MAX_VALUE));
+    complexValue.getValue().add(new Property(null, "DynPropSingle", ValueType.PRIMITIVE,
+            (float) 1.79000000E+20));
+    complexValue.getValue().add(new Property(null, "DynPropDouble", ValueType.PRIMITIVE,
+            -1.7900000000000000E+19));
+    complexValue.getValue().add(new Property(null, "DynPropDecimal", ValueType.PRIMITIVE,
+            BigDecimal.valueOf(34)));
+    complexValue.getValue().add(new Property(null, "DynPropBinary", ValueType.PRIMITIVE,
+            new byte[] {0x01, 0x23, 0x45, 0x67, (byte) 0x89, (byte) 0xAB, (byte) 0xCD, (byte) 0xEF}));
+    complexValue.getValue().add(new Property(null, "DynPropDate", ValueType.PRIMITIVE,
+            DataCreator.getDateTime(2012, 12, 3, 0 , 0, 0)));
+    complexValue.getValue().add(new Property(null, "DynPropDateTimeOffset", ValueType.PRIMITIVE,
+            new Timestamp(1354518983000L)));
+    complexValue.getValue().add(new Property(null, "DynPropGuid", ValueType.PRIMITIVE,
+            UUID.fromString("01234567-89ab-cdef-0123-456789abcdef")));
+    entity.addProperty(new Property(null, "DynamicProperties", ValueType.COMPLEX, complexValue));
+    EdmEntityType entityType = spy(edmEntitySet.getEntityType());
+    doReturn(true).when(entityType).isOpenType();
+
+    InputStream result = serializer.entity(metadata, entityType, entity,
+            EntitySerializerOptions.with()
+                    .contextURL(ContextURL.with().entitySet(edmEntitySet).suffix(Suffix.ENTITY).build())
+                    .build()).getContent();
+    final String resultString = IOUtils.toString(result);
+    final String expectedResult = "{\"@odata.context\":\"$metadata#ESTwoPrim/$entity\","
+            + "\"@odata.metadataEtag\":\"W/\\\"metadataETag\\\"\","
+            + "\"PropertyInt16\":32767,"
+            + "\"PropertyString\":null,"
+            + "\"DynPropInt16\":123,"
+            + "\"DynPropString\":\"First Resource - positive values\","
+            + "\"DynPropBoolean\":true,"
+            + "\"DynPropByte\":255,"
+            + "\"DynPropSByte\":127,"
+            + "\"DynPropInt32\":2147483647,"
+            + "\"DynPropInt64\":9223372036854775807,"
+            + "\"DynPropSingle\":1.79E20,"
+            + "\"DynPropDouble\":-1.79E19,"
+            + "\"DynPropDecimal\":34,"
+            + "\"DynPropBinary\":\"ASNFZ4mrze8=\","
+            + "\"DynPropDate\":\"2012-12-03\","
+            + "\"DynPropDateTimeOffset\":\"2012-12-03T07:16:23Z\","
+            + "\"DynPropGuid\":\"01234567-89ab-cdef-0123-456789abcdef\"}";
+    Assert.assertEquals(expectedResult, resultString);
+  }
+
   @Test
   public void entitySimpleMetadataFull() throws Exception {
     final EdmEntitySet edmEntitySet = entityContainer.getEntitySet("ESAllPrim");
@@ -496,6 +625,54 @@ public class ODataJsonSerializerTest {
         + "\"PropertySByte\":127,"
         + "\"PropertyTimeOfDay\":\"01:00:01\""
         + "}}";
+    Assert.assertEquals(expectedResult, resultString);
+  }
+
+  @Test
+  public void openEntityComplex() throws Exception {
+    final EdmEntitySet edmEntitySet = entityContainer.getEntitySet("ESTwoPrim");
+    Entity entity = new Entity();
+    entity.setType(edmEntitySet.getEntityType().getFullQualifiedName().getFullQualifiedNameAsString());
+    entity.setId(new URI("ESTwoPrim(32767)"));
+    entity.addProperty(new Property("Edm.Int16", "PropertyInt16", ValueType.PRIMITIVE, Short.MAX_VALUE));
+    ComplexValue complexValue = new ComplexValue();
+    entity.addProperty(new Property(null, "DynamicProperties", ValueType.COMPLEX, complexValue));
+
+    final EdmEntitySet testEntitySet = entityContainer.getEntitySet("ESCompAllPrim");
+    final Entity testEntity = data.readAll(testEntitySet).getEntities().get(0);
+    final Property testData = testEntity.getProperty("PropertyComp");
+    complexValue.getValue().add(testData);
+    EdmEntityType entityType = spy(edmEntitySet.getEntityType());
+    doReturn(true).when(entityType).isOpenType();
+
+    InputStream result = serializer.entity(metadata, entityType, entity,
+            EntitySerializerOptions.with()
+                    .contextURL(ContextURL.with().entitySet(edmEntitySet).suffix(Suffix.ENTITY).build())
+                    .build()).getContent();
+    final String resultString = IOUtils.toString(result);
+    final String expectedResult = "{\"@odata.context\":\"$metadata#ESTwoPrim/$entity\","
+            + "\"@odata.metadataEtag\":\"W/\\\"metadataETag\\\"\","
+            + "\"PropertyInt16\":32767,"
+            + "\"PropertyString\":null,"
+            + "\"PropertyComp\":{"
+            + "\"@odata.type\":\"#olingo.odata.test1.CTAllPrim\","
+            + "\"PropertyString\":\"First Resource - first\","
+            + "\"PropertyBinary\":\"ASNFZ4mrze8=\","
+            + "\"PropertyBoolean\":true,"
+            + "\"PropertyByte\":255,"
+            + "\"PropertyDate\":\"2012-10-03\","
+            + "\"PropertyDateTimeOffset\":\"2012-10-03T07:16:23.1234567Z\","
+            + "\"PropertyDecimal\":34.27,"
+            + "\"PropertySingle\":1.79E20,"
+            + "\"PropertyDouble\":-1.79E19,"
+            + "\"PropertyDuration\":\"PT6S\","
+            + "\"PropertyGuid\":\"01234567-89ab-cdef-0123-456789abcdef\","
+            + "\"PropertyInt16\":32767,"
+            + "\"PropertyInt32\":2147483647,"
+            + "\"PropertyInt64\":9223372036854775807,"
+            + "\"PropertySByte\":127,"
+            + "\"PropertyTimeOfDay\":\"01:00:01\""
+            + "}}";
     Assert.assertEquals(expectedResult, resultString);
   }
 
@@ -2056,5 +2233,5 @@ public class ODataJsonSerializerTest {
        "]" + 
        "}"; 
      Assert.assertEquals(expected, resultString);
-   }   
+   }
 }
