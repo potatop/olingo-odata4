@@ -421,8 +421,7 @@ public class ODataJsonDeserializer implements ODataDeserializer {
     return type;
   }
 
-  private static EdmType getEdmTypeFromTypeName(Edm edm, String typeName)
-  {
+  private static EdmType getEdmTypeFromTypeName(Edm edm, String typeName) {
     if (typeName == null || typeName.isEmpty()) {
       return null;
     }
@@ -471,7 +470,8 @@ public class ODataJsonDeserializer implements ODataDeserializer {
             if (!propertyName.isEmpty()) {
               JsonNode jsonNode = node.get(propertyName);
               if (jsonNode == null) {
-                throw new DeserializerException("property: " + propertyName + " has property annotations but not value.",
+                throw new DeserializerException("property: "
+                        + propertyName + " has property annotations but not value.",
                         MessageKeys.INVALID_NULL_PARAMETER, propertyName);
               }
               String typeName = trimStart(field.getValue().asText(), "#");
